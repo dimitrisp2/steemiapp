@@ -246,17 +246,36 @@ End Sub
 
 Sub DynGlobalProps(Props As String)
 	'Parse global properties to convert Vests to SP
-	Dim TempTVFS, TempTVS As String
+	Log(Props)
+	Dim TempTVFS, TempTVFSPrecision, TempTVS, TempTVSPrecision As String
 	Dim parser As JSONParser
 	parser.Initialize(Props)
 	Dim root As Map = parser.NextObject
 	Dim currentProps As Map = root.Get("result")
-	Dim curTVS As Map = currentProps.Get("total_vesting_shares")
-	Dim curTVFS As Map = currentProps.Get("total_vesting_fund_steem")
-	TempTVS = curTVS.Get("amount")
-	TempTVFS = curTVFS.Get("amount")
-	TVFS = TempTVFS.SubString2(0, TempTVFS.Length - curTVFS.Get("precision")) & "." & TempTVFS.SubString(TempTVFS.Length - curTVFS.Get("precision"))
-	TVS = TempTVS.SubString2(0, TempTVS.Length - curTVS.Get("precision")) & "." & TempTVS.SubString(TempTVS.Length - curTVS.Get("precision"))
+
+	' Blockchain sends named arrays some times, not sure why...
+	' Because of this, we have to handle both, by catching the error
+	Try
+		Dim curTVSMap As Map = currentProps.Get("total_vesting_shares")
+		TempTVS = curTVSMap.Get("amount")
+		TempTVSPrecision = curTVSMap.Get("precision")
+	Catch
+		Dim curTVS As List = currentProps.Get("total_vesting_shares")
+		TempTVS = curTVS.Get(0)
+		TempTVSPrecision = curTVS.Get(1)
+	End Try
+	Try
+		Dim curTVFSMap As Map = currentProps.Get("total_vesting_fund_steem")
+		TempTVFS = curTVFSMap.Get("amount")
+		TempTVFSPrecision = curTVFSMap.Get("precision")
+	Catch
+		Dim curTVFS As List = currentProps.Get("total_vesting_fund_steem")
+		TempTVFS = curTVFS.Get(0)
+		TempTVFSPrecision = curTVFS.Get(1)
+	End Try
+	
+	TVFS = TempTVFS.SubString2(0, TempTVFS.Length - TempTVFSPrecision) & "." & TempTVFS.SubString(TempTVFS.Length - TempTVFSPrecision)
+	TVS = TempTVS.SubString2(0, TempTVS.Length - TempTVSPrecision) & "." & TempTVS.SubString(TempTVS.Length - TempTVSPrecision)
 End Sub
 
 Sub lvAuthor_ItemClick (Position As Int, Value As Object)
