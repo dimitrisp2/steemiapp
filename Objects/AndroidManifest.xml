@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	package="eu.dimitrisp.steenfo"
+	android:versionCode="17"
+	android:versionName="Amberdawn"
+	android:installLocation="preferExternal">
+	
+	<uses-sdk android:minSdkVersion="5" android:targetSdkVersion="26"/>
+	<supports-screens android:largeScreens="true" 
+	    android:normalScreens="true" 
+	    android:smallScreens="true" 
+	    android:anyDensity="true"/>
+	<uses-permission android:name="android.permission.INTERNET"/>
+	<uses-permission android:name="android.permission.WAKE_LOCK"/>
+	<application
+		android:icon="@drawable/icon"
+		android:label="SteemiAPP"
+		android:theme="@style/DarkTheme">
+		
+		<activity android:name="de.amberhome.objects.preferenceactivity"/>
+		<activity
+			android:windowSoftInputMode="stateHidden"
+			android:launchMode="singleTop"
+			android:name=".main"
+			android:label="SteemiAPP"
+			android:screenOrientation="portrait">
+			<intent-filter>
+			   <action android:name="android.intent.action.MAIN" />
+			   <category android:name="android.intent.category.LAUNCHER" />
+			</intent-filter>
+			
+		</activity>
+		<activity
+			android:windowSoftInputMode="stateHidden"
+			android:launchMode="singleTop"
+			android:name=".showpost"
+			android:label="SteemiAPP"
+			android:screenOrientation="portrait">
+		</activity>
+		<service android:name="anywheresoftware.b4a.samples.httputils2.httputils2service">
+		</service>
+		<receiver android:name="anywheresoftware.b4a.samples.httputils2.httputils2service$httputils2service_BR">
+		</receiver>
+	</application>
+</manifest>

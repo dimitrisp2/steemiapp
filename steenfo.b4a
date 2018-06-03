@@ -1,0 +1,690 @@
+﻿Build1=Default,eu.dimitrisp.steenfo
+File1=author.bal
+File10=outgoing.png
+File11=outgoing2.png
+File12=post.html
+File13=post-blank-pic.png
+File14=post-bootstrap.bundle.min.js
+File15=post-bootstrap.min.css
+File16=post-custom.css
+File17=post-custom.js
+File18=post-jquery.min.js
+File19=posts.bal
+File2=author.png
+File20=posts.png
+File21=posts2.png
+File22=post-showdown.min.js
+File23=ShowPost.bal
+File24=upvotes.bal
+File25=upvotes2.bal
+File3=author2.png
+File4=curation.bal
+File5=curation.png
+File6=curation2.png
+File7=incoming.png
+File8=incoming2.png
+File9=main.bal
+FileGroup1=Default Group
+FileGroup10=Default Group
+FileGroup11=Default Group
+FileGroup12=Default Group
+FileGroup13=Default Group
+FileGroup14=Default Group
+FileGroup15=Default Group
+FileGroup16=Default Group
+FileGroup17=Default Group
+FileGroup18=Default Group
+FileGroup19=Default Group
+FileGroup2=Default Group
+FileGroup20=Default Group
+FileGroup21=Default Group
+FileGroup22=Default Group
+FileGroup23=Default Group
+FileGroup24=Default Group
+FileGroup25=Default Group
+FileGroup3=Default Group
+FileGroup4=Default Group
+FileGroup5=Default Group
+FileGroup6=Default Group
+FileGroup7=Default Group
+FileGroup8=Default Group
+FileGroup9=Default Group
+Group=Default Group
+IconFile=
+Library1=core
+Library2=okhttputils2
+Library3=json
+Library4=phone
+Library5=ahpreferenceactivity
+ManifestCode='This code will be applied to the manifest file during compilation.~\n~'You do not need to modify it in most cases.~\n~'See this link for for more information: http://www.b4x.com/forum/showthread.php?p=78136~\n~AddManifestText(~\n~<uses-sdk android:minSdkVersion="5" android:targetSdkVersion="26"/>~\n~<supports-screens android:largeScreens="true" ~\n~    android:normalScreens="true" ~\n~    android:smallScreens="true" ~\n~    android:anyDensity="true"/>)~\n~SetApplicationAttribute(android:icon, "@drawable/icon")~\n~SetApplicationAttribute(android:label, "$LABEL$")~\n~'End of default text.~\n~CreateResourceFromFile(Macro, Themes.DarkTheme)~\n~AddApplicationText(<activity android:name="de.amberhome.objects.preferenceactivity"/>)
+Module1=ShowPost
+NumberOfFiles=25
+NumberOfLibraries=5
+NumberOfModules=1
+Version=8
+@EndOfDesignText@
+#Region  Project Attributes 
+	#ApplicationLabel: SteemiAPP
+	#VersionCode: 17
+	
+	#VersionName: Amberdawn
+	'SupportedOrientations possible values: unspecified, landscape or portrait.
+	#SupportedOrientations: portrait
+	#CanInstallToExternalStorage: True
+	#DebuggerForceStandardAssets : true
+#End Region
+
+#Region  Activity Attributes 
+	#FullScreen: False
+	#IncludeTitle: False
+	#IgnoreWarnings: 15
+#End Region
+
+Sub Process_Globals
+	'These global variables will be declared once when the application starts.
+	'These variables can be accessed from all modules.
+	Dim manager As AHPreferenceManager
+	Dim screen As AHPreferenceScreen
+	Dim ChosenPostBody, ChosenPostTitle, ChosenPostPPV, ChosenPostAuthor, ChosenPostCreated, ChosenPostURL, ChosenUpvotedBy As String
+	Dim appver As Int = 17
+End Sub
+
+Sub Globals
+	'These global variables will be redeclared each time the activity is created.
+	'These variables can only be accessed from this module.
+	Private btnrefresh, btnPrice As Button
+	Private TabHost1 As TabHost
+	Private lvIncoming, lvOutgoing, lvCuration, lvAuthor, lvPosts As ListView
+	Dim auth1, auth2, in1, in2, out1, out2, posts1, posts2, cur1, cur2 As Bitmap
+	Dim uOut, uIn, uCur, uAuth As List
+	Dim username, server, entriesno, postsno As String
+	Dim TVFS, TVS As Float
+	Dim AppSettings As Map
+	Private totalAuth, totalCur, totalPend, lblMenu, lblSTEEMChange, lblSTEEMPrice, lblSBDChange, lblSBDPrice As Label
+	Dim TotalSBD, TotalSP, TotalAuthSP, TotalAuthSBD, TotalAuthSTEEM As Double = 0
+	Dim pnPrice As Panel
+End Sub
+
+Sub Activity_Create(FirstTime As Boolean)
+	'Load layout
+	Activity.LoadLayout("main")
+	'Initialize settings activity
+	AppSettings.Initialize
+	CreatePreferenceScreen
+	'Check if settings are already set (meaning, the app has started again), and if not set defaults
+	If manager.GetAll.Size = 0 Then SetDefaults
+	'Fetch the details we need
+	server = manager.GetString("server")
+	username = manager.GetString("username")
+	entriesno = manager.GetString("entriesno")
+	postsno = manager.GetString("postsno")
+	'Block app input while loading data
+	ProgressDialogShow2("Loading blockchain data...", False)
+	'Setup the user interface, and initialise the lists
+	SetupUI
+	uOut.Initialize
+	uIn.Initialize
+	uCur.Initialize
+	uAuth.Initialize
+	'Start fetchng data, starting with the global properties (used to calculate SP/Vests etc)
+	Dim job1 As HttpJob
+	job1.Initialize("DynGlobalProps",Me)
+	job1.PostString("https://api.steemit.com","{""jsonrpc"":""2.0"",""method"":""call"",""params"":[""database_api"",""get_dynamic_global_properties""]}")
+
+End Sub
+
+Sub Activity_Resume
+	
+End Sub
+
+Sub Activity_Pause (UserClosed As Boolean)
+
+End Sub
+
+Sub JobDone (Job As HttpJob)
+	Log("Current job: " & Job.JobName)
+	Dim job1 As HttpJob
+	If Job.Success = True Then
+		Select Job.JobName
+			Case "DynGlobalProps"
+				'Parse the reply from the server
+				DynGlobalProps(Job.GetString)
+				'Start fetching user posts
+				job1.Initialize("GetUserPosts",Me)
+				job1.PostString("https://" & server,"{""id"":1,""jsonrpc"":""2.0"",""method"":""call"",""params"":[""database_api"",""get_discussions_by_blog"",[{""tag"":"""&username&""",""limit"":"&postsno&",""start_author"":null,""start_permlink"":null}]]}")
+			Case "GetUserPosts"
+				'Parse user posts reply from server
+				ParseUserPost(Job.GetString)
+				'Start fetching account history
+				job1.Initialize("GetAccHistory",Me)
+				job1.PostString("https://" & server,"{""id"":1,""jsonrpc"":""2.0"",""method"":""call"",""params"":[""database_api"",""get_account_history"",["""&username&""",-1,"&entriesno&"]]}")
+			Case "GetAccHistory"
+				'Parse the reply from the server
+				ParseAccHistory(Job.GetString)
+			Case "GetSBDPrice"
+				'Parse the reply from the server
+				ParsePrice(Job.GetString)
+				'Fetch STEEM price
+				job1.Initialize("GetSTEEMPrice",Me)
+				job1.Download("https://api.coinmarketcap.com/v2/ticker/1230/")
+			Case "GetSTEEMPrice"
+				'Parse the reply from the server
+				ParsePrice(Job.GetString)
+			Case "ShowPost"
+				'Parse the reply from the server
+				ParseSinglePost(Job.GetString)
+		End Select
+	Else ' Job could not complete, show messages and hide the loading screen.
+'		Log("Error")
+		'ToastMessageShow("Error fetching blockchain data", True)
+		Msgbox("API Node is busy or not responding. Please try again later, or choose a different API node.", "Error")
+		'lvIncoming.AddTwoLines2("There was a problem fetching data","The API node is busy or not responding. Try again later.", "No Internet")
+		ProgressDialogHide
+	End If
+	Job.Release
+End Sub
+
+Sub btnPrice_Click
+	'Price button clicked. Start fetching SBD/STEEM price from Coinmarketcap
+	Dim job1 As HttpJob
+	job1.Initialize("GetSBDPrice",Me)
+	job1.Download("https://api.coinmarketcap.com/v2/ticker/1312/")
+	'Show the price panel
+	pnPrice.Visible = True
+End Sub
+
+Sub btnrefresh_Click
+	' Re-set the details, just in case something changed.
+	server = manager.GetString("server")
+	username = manager.GetString("username")
+	entriesno = manager.GetString("entriesno")
+	postsno = manager.GetString("postsno")
+	'Start fetching all data from the blockchain and block user input
+	ProgressDialogShow2("Loading blockchain data...", False)
+	Dim job1 As HttpJob
+	job1.Initialize("DynGlobalProps",Me)
+	job1.PostString("https://api.steemit.com","{""id"":""1"", ""jsonrpc"":""2.0"",""method"":""call"",""params"":[""database_api"",""get_dynamic_global_properties""]}")
+End Sub
+
+Sub ConvertVestToSP(Vests As String) As Float
+	Dim Vest, V2SP As Float
+	Vest = Vests.Replace(" VESTS", "")
+	V2SP = TVFS * Vest / TVS
+	Return V2SP
+End Sub
+
+Sub CreatePreferenceScreen
+	screen.Initialize("Settings", "")
+	'create two categories
+	Dim cat1, cat2 ,cat3 As AHPreferenceCategory
+	Dim SettingsIntent As PhoneIntents
+	
+	cat1.Initialize("About You")
+	cat1.AddEditText("username", "Username", "Your steemit username without ""@""", "dimitrisp", "")
+	cat2.Initialize("API Settings")
+	cat2.AddList("entriesno", "Entries to Fetch", "How many entries I should fetch from the API Server", "250", "", Array As String("100", "150", "200", "250", "300", "350", "400", "450", "500", "550"))
+	cat2.AddList("postsno", "Posts to Fetch", "How many posts should I fetch? Helpful if you post more than 15 times per week!", "15", "", Array As String(10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110, 120))
+	cat2.AddList("server", "API Node", "The preferred Steemit API node", "api.steemit.com", "", Array As String("api.steemit.com", "steemd.minnowsupportproject.org", "steemd.privex.io", "rpc.steemviz.com", "rpc.curiesteem.com"))
+	cat3.Initialize("About SteemiAPP")
+	cat3.AddIntent("App Version", "Amberdawn/r"& appver&" - tap for changelog", SettingsIntent.OpenBrowser("https://steemi.app/changelog.html#r"& appver), "")
+	cat3.AddIntent("About", "App created by @dimitrisp. Tap to visit my Steemit Blog", SettingsIntent.OpenBrowser("https://steemit.com/@dimitrisp"), "")
+	cat3.AddIntent("Rate me?", "Rate this app! Tell me how to improve it!", SettingsIntent.OpenBrowser("https://play.google.com/store/apps/details?id=eu.dimitrisp.steenfo"), "")
+	'add the categories to the main screen
+	screen.AddPreferenceCategory(cat1)
+	screen.AddPreferenceCategory(cat2)
+	screen.AddPreferenceCategory(cat3)
+End Sub
+
+Sub DynGlobalProps(Props As String)
+	'Parse global properties to convert Vests to SP
+	Dim TempTVFS, TempTVS As String
+	Dim parser As JSONParser
+	parser.Initialize(Props)
+	Dim root As Map = parser.NextObject
+	Dim currentProps As Map = root.Get("result")
+	Dim curTVS As Map = currentProps.Get("total_vesting_shares")
+	Dim curTVFS As Map = currentProps.Get("total_vesting_fund_steem")
+	TempTVS = curTVS.Get("amount")
+	TempTVFS = curTVFS.Get("amount")
+	TVFS = TempTVFS.SubString2(0, TempTVFS.Length - curTVFS.Get("precision")) & "." & TempTVFS.SubString(TempTVFS.Length - curTVFS.Get("precision"))
+	TVS = TempTVS.SubString2(0, TempTVS.Length - curTVS.Get("precision")) & "." & TempTVS.SubString(TempTVS.Length - curTVS.Get("precision"))
+End Sub
+
+Sub lvAuthor_ItemClick (Position As Int, Value As Object)
+	ProgressDialogShow("Loading post, please wait...")
+	Dim PostArray() As String
+	PostArray = Regex.Split("/", Value)
+	'Log(Value)
+	'Log("Username: " & PostArray(0))
+	'Log("permlink: " & PostArray(1))
+	Dim job1 As HttpJob
+	job1.Initialize("ShowPost",Me)
+	job1.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_content"", ""params"":["""&PostArray(0)&""", """&PostArray(1)&"""], ""id"":1}")
+End Sub
+
+Sub lvClick(Value As Object)
+	'Used to handle the listview taps and load the selected post
+	ProgressDialogShow("Loading post, please wait...")
+	Dim PostArray() As String
+	PostArray = Regex.Split("/", Value)
+	Dim job1 As HttpJob
+	job1.Initialize("ShowPost",Me)
+	job1.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_content"", ""params"":["""&PostArray(0)&""", """&PostArray(1)&"""], ""id"":1}")
+End Sub
+
+Sub lvCuration_ItemClick (Position As Int, Value As Object)
+	lvClick(Value)
+End Sub
+
+Sub lvIncoming_ItemClick (Position As Int, Value As Object)
+	lvClick(Value)
+End Sub
+
+Sub lvOutgoing_ItemClick (Position As Int, Value As Object)
+	lvClick(Value)
+End Sub
+
+Sub lvPosts_ItemClick (Position As Int, Value As Object)
+	lvClick(Value)
+End Sub
+
+
+Sub ParseAccHistory(AccHistory As String)
+	'Log(AccHistory)
+	Dim parser As JSONParser
+	parser.Initialize(AccHistory)
+	TotalSP = 0
+	'Clear previous data
+	lvAuthor.Clear
+	lvCuration.Clear
+	lvIncoming.Clear
+	lvOutgoing.Clear
+	uAuth.Clear
+	uCur.Clear
+	uIn.Clear
+	uOut.Clear
+	If AccHistory.Length < 3 Then
+		MsgboxAsync("The account name you've chosen, does not exist. If you believe this is an error, please choose a different API node","Error")
+		ProgressDialogHide
+		Return
+	End If
+	' Parse the server reply to get the account history
+	Dim root As Map = parser.NextObject
+	Dim result As List = root.Get("result")
+	'For Each result As List In parser.NextArray
+	For Each colroot2 As List In result
+		'Log(colroot2)
+		For Each colroot In colroot2
+			'Log(colroot)
+			Dim ColMap,OpMap,TXMap As Map
+			Dim ColInt As Int'ignore
+			Dim ThisType As String
+			TXMap.Initialize
+			If colroot Is Map Then
+				'Log("it's a map")
+				ColMap = colroot
+				Dim trx_id As String = ColMap.Get("trx_id")
+				Dim virtual_op As Int = ColMap.Get("virtual_op") 'ignore
+				Dim op As List = ColMap.Get("op")
+				Dim op_in_trx As Int = ColMap.Get("op_in_trx") 'ignore
+				Dim block As Int = ColMap.Get("block")
+				Dim trx_in_block As String = ColMap.Get("trx_in_block") 'ignore
+				Dim timestamp As String = ColMap.Get("timestamp")
+				For Each colop In op
+					If colop Is List Then
+					Else if colop Is Map Then
+						OpMap=colop
+					Else If colop Is String Then
+						ThisType = colop
+					Else
+
+					End If
+				Next
+				TXMap.Put("TXID", trx_id)
+				TXMap.Put("Block", block)
+				TXMap.Put("Timestamp", timestamp)
+				ParseTX(ThisType, TXMap, OpMap)
+			Else
+				'Not interested in any other type, so we skip it. Our data are stored in a map.
+			End If
+		Next
+	Next
+	
+	' Fill incoming upvotes list view
+	For i = uIn.Size - 1 To 0 Step -1
+		Dim ThisTX() As String
+		ThisTX = Regex.Split("\^\$\^", uIn.Get(i))
+		lvIncoming.AddTwoLines2(ThisTX(0), ThisTX(1), ThisTX(2))
+	Next
+	
+	'Fill outgoing upvotes list view
+	For i = uOut.Size - 1 To 0 Step -1
+		Dim ThisTX() As String
+		ThisTX = Regex.Split("\^\$\^", uOut.Get(i))
+		lvOutgoing.AddTwoLines2(ThisTX(0), ThisTX(1), ThisTX(2))
+	Next
+	
+	'Fill curation rewards
+	For i = uCur.Size - 1 To 0 Step -1
+		Dim ThisTX() As String
+		ThisTX = Regex.Split("\^\$\^", uCur.Get(i))
+		'Log(ThisTX)
+		lvCuration.AddTwoLines2(ThisTX(0), ThisTX(1), ThisTX(2))
+	Next
+	
+	'Fill recent Curation/Author rewards labels
+	totalCur.Text = Round2(TotalSP,3) & " Steem in Curation Rewards"
+	totalAuth.Text = "Total: " & Round2(TotalAuthSBD,3) & " SBD - " & Round2(TotalAuthSP,3) & " SP - " & Round2(TotalAuthSTEEM, 3) & " STEEM"
+	
+	'Fill author rewards
+	For i = uAuth.Size - 1 To 0 Step -1
+		Dim ThisTX() As String
+		ThisTX = Regex.Split("\^\$\^", uAuth.Get(i))
+		'Log(ThisTX)
+		lvAuthor.AddTwoLines2(ThisTX(0), ThisTX(1), ThisTX(2))
+	Next
+	ProgressDialogHide
+End Sub
+
+Sub ParsePrice(PriceInput As String)
+	If (PriceInput.Length < 20) Then
+		Msgbox("CoinMarketCap returned error. Please try again later","CoinMarketCap Error")
+		'ToastMessageShow("Remote server is busy, try again later...", True)
+		Return
+	End If
+	Dim parser As JSONParser
+	parser.Initialize(PriceInput)
+	Dim root As Map = parser.NextObject
+	'Dim metadata As Map = root.Get("metadata")
+	'Dim timestamp As Int = metadata.Get("timestamp")
+	Try
+		Dim data As Map = root.Get("data")
+	Catch
+		Msgbox("CoinMarketCap returned error. Please try again later","CoinMarketCap Error")
+	End Try
+	
+	Dim symbol As String = data.Get("symbol")
+	Dim quotes As Map = data.Get("quotes")
+	Dim USD As Map = quotes.Get("USD")
+	Dim percent_change_24h As Double = USD.Get("percent_change_24h")
+	Dim price As Double = USD.Get("price")
+	
+	If symbol =  "SBD" Then
+		lblSBDPrice.text = "$" & price
+		If percent_change_24h < 0 Then
+			lblSBDChange.TextColor = Colors.RGB(255, 89, 89)
+		Else If percent_change_24h > 0 Then
+			lblSBDChange.TextColor = Colors.RGB(123, 255, 89)
+		Else
+			lblSBDChange.TextColor = Colors.White
+		End If
+		lblSBDChange.Text = "Change: " & percent_change_24h & "%"
+	Else If symbol = "STEEM" Then
+		lblSTEEMPrice.Text = "$" & price
+		If percent_change_24h < 0 Then
+			lblSTEEMChange.TextColor = Colors.RGB(255, 89, 89)
+		Else If percent_change_24h > 0 Then
+			lblSTEEMChange.TextColor = Colors.RGB(123, 255, 89)
+		Else
+			lblSTEEMChange.TextColor = Colors.White
+		End If
+		lblSTEEMChange.Text = "Change: " & percent_change_24h & "%"
+	End If
+End Sub
+
+Sub ParseSinglePost (TX As String)
+	'Log(TX)
+	Log(TX)
+	If TX.Length < 20 Then
+		MsgboxAsync("Server error. Please try again later or choose a different API node","Error")
+	End If
+	Dim parser As JSONParser
+	parser.Initialize(TX)
+	Dim root As Map = parser.NextObject
+	Try
+		Dim result As Map = root.Get("result")
+		Dim title As String = result.Get("title")
+	Catch
+		ProgressDialogHide
+		Msgbox("Unable to fetch post. API Node returns error. If the problem persists, please choose a different API node", "Error")
+		Return
+	End Try
+	Dim body As String = result.Get("body")
+	'Dim promoted As String = result.Get("promoted")
+	Dim pending_payout_value As String = result.Get("pending_payout_value")
+	'Dim reblogged_by As List = result.Get("reblogged_by")
+	Dim active_votes As List = result.Get("active_votes")
+	Dim votescount, thisvote As Int = 0
+	votescount = active_votes.Size
+	ChosenUpvotedBy = ""
+	For Each colactive_votes As Map In active_votes
+		'Dim weight As Int = colactive_votes.Get("weight")
+		'Dim reputation As String = colactive_votes.Get("reputation")
+		Dim voter As String = colactive_votes.Get("voter")
+		thisvote = thisvote + 1
+		If votescount > 6 Then
+			If thisvote < 6 Then
+				ChosenUpvotedBy = voter & ", " & ChosenUpvotedBy
+			Else if thisvote = 6 Then
+				ChosenUpvotedBy = voter & ", " & ChosenUpvotedBy & " " & (votescount - thisvote) & " more"
+			Else
+			
+			End If
+		Else ' votescount 6 or less
+			If thisvote = 1 Then
+				ChosenUpvotedBy = voter
+			Else
+				ChosenUpvotedBy = voter & ", " & ChosenUpvotedBy
+			End If
+		End If
+	Next
+	Dim author As String = result.Get("author")
+	Dim created As String = result.Get("created")
+	Dim url As String = result.Get("url")
+	ChosenPostBody = body
+	' Hack for Steepshot broken horizontal line
+	ChosenPostURL = "https://steemit.com/" & url
+	ChosenPostBody = ChosenPostBody.Replace("-   --  -   - ---  -- - -  -- - -   -----   --  -  - ----  -    -   - --", "---")
+	ChosenPostBody =ChosenPostBody.Replace("-- -   -    -  ---- -  -  --   -----   - - --  - - --  --- -   -  --   -", "---")
+	ChosenPostTitle = title
+	ChosenPostPPV = pending_payout_value
+	ChosenPostAuthor = author
+	ChosenPostCreated = TimeStampConvert(created, "Past")
+	ProgressDialogHide
+	StartActivity("ShowPost")
+End Sub
+
+Sub ParseTX(TXType As String, TXData As Map, OpData As Map)
+	'Log("Called for " & TXType)
+	' TX Data {TXID=93693a4670ec71c0d0730be92a697978bac8b139, Block=22557278, Timestamp=2018-05-19T04:29:27}
+	Dim txID As String = TXData.Get("TXID")
+	Dim BlockID As String = TXData.Get("Block")
+	Dim timestamp As String = TimeStampConvert(TXData.Get("Timestamp"), "Past")
+	If TXType = "vote" Then
+		' Vote Data {voter=dimitrisp, author=nadia.greece, permlink=you-would-live-in-this-house, weight=9000}
+		Dim Voter As String = OpData.Get("voter")
+		Dim Author As String = OpData.Get("author")
+		Dim PermLink As String = OpData.Get("permlink")
+		Dim Weight As Float = OpData.Get("weight") / 100
+		If Voter = username Then
+			'lvOutgoing.AddTwoLines2(Author & " - " & Weight & "% weight", PermLink, TXType & "^" & txID & "^" &BlockID & "^" & PermLink)
+			uOut.Add(Author & " (" & Round2(Weight, 2) & "%) "  & timestamp & "^$^" & PermLink & "^$^" & Author & "/" & PermLink)
+		Else
+			'  & "^$^" &
+			'lvIncoming.AddTwoLines2(Voter & " - " & Weight & "%", PermLink, TXType & "^" & txID & "^" &BlockID & "^" & PermLink)
+			uIn.Add(Voter & " (" & Round2(Weight,2) & "%) "  & timestamp & "^$^" & PermLink & "^$^" & Author & "/" & PermLink)
+		End If
+	Else If TXType = "curation_reward" Then
+		' Curation Data: {curator=dimitrisp, reward=10.173043 VESTS, comment_author=evimeria, comment_permlink=7-day-wayback-music-challenge-day-2-bee-geesstaying-alive}
+		' lvCuration.AddTwoLines2(Round2(ConvertVestToSP(OpData.Get("reward")),3) & "SP @ " & timestamp,  "@" & OpData.Get("comment_author") & "/" & OpData.Get("comment_permlink"), TXType & "^" & txID & "^" &BlockID & "^" & PermLink)
+		'
+		Dim SP As String = OpData.Get("reward")
+		Dim Author As String = OpData.Get("comment_author")
+		Dim PermLink As String = OpData.Get("comment_permlink")
+		SP = ConvertVestToSP(OpData.Get("reward"))
+		uCur.Add(Round2(SP ,3) & "SP - " & timestamp & "^$^" &  "@" & OpData.Get("comment_author") & "/" & OpData.Get("comment_permlink") & "^$^" & Author & "/" & PermLink)
+		TotalSP = TotalSP + SP
+		'pLog(TotalSP & " SP so far")
+	Else If TXType = "author_reward" Then
+		'Log(OpData)
+		' Author data: {author=dimitrisp, permlink=just-groomed--2018-05-11-13-45-28, sbd_payout=3.280 SBD, steem_payout=0.000 STEEM, vesting_payout=2348.010523 VESTS}
+		Dim Author As String = OpData.Get("Author")
+		Dim PermLink As String = OpData.Get("permlink")
+		Dim SBD As String = OpData.Get("sbd_payout")
+		Dim STEEM As String = OpData.Get("steem_payout")
+		Dim SP As String = OpData.Get("vesting_payout")
+		SP = ConvertVestToSP(SP)
+		If PermLink.Length <= 60 Then
+		Else
+			PermLink = PermLink.SubString2(0, 60) & "..."
+		End If
+		
+		If STEEM = "0.000 STEEM" Then
+			STEEM = ""
+		Else
+			TotalAuthSTEEM = TotalAuthSTEEM + STEEM.Replace(" STEEM", "")
+			STEEM = ", " & STEEM.Replace(" ", "")
+		End If
+		TotalAuthSBD = TotalAuthSBD + SBD.Replace(" SBD", "")
+		TotalAuthSP = TotalAuthSP + Round2(SP, 3)
+		
+		uAuth.Add(SBD.Replace(" ", "") & STEEM & ", " & Round2(SP, 3) & "SP - " & timestamp & "^$^" & PermLink & "^$^" & TXType & "^" & txID & "^" &BlockID & "^" & Author & "/" & PermLink)
+		
+	Else
+		'Log (TXType)
+	End If
+	
+End Sub
+
+Sub ParseUserPost(PostHistory As String)
+	Dim parser As JSONParser
+	parser.Initialize(PostHistory)
+	Dim uPosts As List
+	uPosts.Initialize
+	lvPosts.Clear
+	TotalSBD = 0
+	If PostHistory.Length < 20 Then
+		Return
+	End If
+	Dim root As Map = parser.NextObject
+	Dim result As List = root.Get("result")
+	For Each root As Map In result
+		'Log(root)
+		Dim title As String = root.Get("title")
+		Dim pending_payout_value As String = root.Get("pending_payout_value")
+		Dim last_payout As String = root.Get("last_payout")
+		Dim author As String = root.Get("author")
+		Dim cashout_time As String = TimeStampConvert(root.Get("cashout_time"), "Future")
+		Dim permlink As String = root.Get("permlink")
+		If author = username And last_payout = "1970-01-01T00:00:00" Then
+			uPosts.Add(title & "^$^" & pending_payout_value & " in " & cashout_time & "^$^" & author & "/" & permlink)
+			TotalSBD = TotalSBD + pending_payout_value.Replace(" SBD", "")
+		End If
+	Next
+	'Log(uPosts.Size)
+	For i = 0 To uPosts.Size - 1
+		Dim ThisPost() As String
+		'Log(uPosts.Get(i))
+		ThisPost = 	Regex.Split("\^\$\^", uPosts.Get(i))
+		'Log(ThisPost)
+		Dim PostTitle As String
+		If ThisPost(0).Length <= 45 Then
+			PostTitle = ThisPost(0)
+		Else
+			PostTitle = ThisPost(0).SubString2(0, 45) & "..."
+		End If
+		lvPosts.AddTwoLines2(PostTitle, ThisPost(1), ThisPost(2))
+	Next
+	totalPend.Text = Round2(TotalSBD,3) & " SBD in Pending Rewards"
+	uPosts.Clear
+End Sub
+
+Sub pnPrice_Click
+	pnPrice.Visible = False
+End Sub
+
+Sub SetDefaults
+	'defaults are only set on the first run.
+	manager.SetString("username", "dimitrisp")
+	manager.SetString("server", "api.steemit.com")
+	manager.SetString("entriesno", "250")
+	manager.SetString("postsno", "15")
+End Sub
+
+Sub SetupUI()
+	auth1 = LoadBitmap(File.DirAssets, "author.png")
+	auth2 = LoadBitmap(File.DirAssets, "author2.png")
+	in1 = LoadBitmap(File.DirAssets, "incoming.png")
+	in2 = LoadBitmap(File.DirAssets, "incoming2.png")
+	out1 = LoadBitmap(File.DirAssets, "outgoing.png")
+	out2 = LoadBitmap(File.DirAssets, "outgoing2.png")
+	posts1 = LoadBitmap(File.DirAssets, "posts.png")
+	posts2 = LoadBitmap(File.DirAssets, "posts2.png")
+	cur1 = LoadBitmap(File.DirAssets, "curation.png")
+	cur2 = LoadBitmap(File.DirAssets, "curation2.png")
+	TabHost1.AddTabWithIcon("", in2, in1,"upvotes.bal")
+	TabHost1.AddTabWithIcon("", out2, out1,"upvotes2.bal")
+	TabHost1.AddTabWithIcon("", cur2, cur1,"curation.bal")
+	TabHost1.AddTabWithIcon("", auth2, auth1,"author.bal")
+	TabHost1.AddTabWithIcon("", posts2, posts1,"posts.bal")
+	
+	lvPosts.TwoLinesLayout.Label.TextSize = 17
+	lvPosts.TwoLinesLayout.Label.TextColor = Colors.White
+	lvPosts.TwoLinesLayout.SecondLabel.TextSize = 13
+	lvPosts.TwoLinesLayout.SecondLabel.TextColor = Colors.LightGray
+	
+	lvAuthor.TwoLinesLayout.Label.TextSize = 17
+	lvAuthor.TwoLinesLayout.Label.TextColor = Colors.White
+	lvAuthor.TwoLinesLayout.SecondLabel.TextSize = 13
+	lvAuthor.TwoLinesLayout.SecondLabel.TextColor = Colors.LightGray
+	
+	lvCuration.TwoLinesLayout.Label.TextSize = 17
+	lvCuration.TwoLinesLayout.Label.TextColor = Colors.White
+	lvCuration.TwoLinesLayout.SecondLabel.TextSize = 13
+	lvCuration.TwoLinesLayout.SecondLabel.TextColor = Colors.LightGray
+	
+	lvIncoming.TwoLinesLayout.Label.TextSize = 17
+	lvIncoming.TwoLinesLayout.Label.TextColor = Colors.White
+	lvIncoming.TwoLinesLayout.SecondLabel.TextSize = 13
+	lvIncoming.TwoLinesLayout.SecondLabel.TextColor = Colors.LightGray
+	
+	lvOutgoing.TwoLinesLayout.Label.TextSize = 17
+	lvOutgoing.TwoLinesLayout.Label.TextColor = Colors.White
+	lvOutgoing.TwoLinesLayout.SecondLabel.TextSize = 13
+	lvOutgoing.TwoLinesLayout.SecondLabel.TextColor = Colors.LightGray
+End Sub
+
+Sub TimeStampConvert(Timestamp As String, When As String) As String
+	DateTime.DateFormat = "yy-MM-dd HH:mm:ss"
+	DateTime.SetTimeZone(0)
+	Dim Elapsed As Long
+	Dim TimeUnit As String = ""
+	Dim TimeHappens As String = ""
+	If When = "Past" Then
+		Elapsed = (DateTime.Now - DateTime.DateParse(Timestamp.Replace("T", " "))) / 1000
+		TimeHappens = " ago"
+	Else
+		Elapsed = (DateTime.DateParse(Timestamp.Replace("T", " ")) - DateTime.Now) / 1000
+		TimeHappens = ""
+	End If
+	
+
+	If (Elapsed < 60) Then
+		TimeUnit = "s"
+	Else If (Elapsed >= 60) And Elapsed < 3600 Then
+		Elapsed = Round2(Elapsed / 60, 0)
+		TimeUnit = "m"
+	Else If (Elapsed >= 3600) And (Elapsed < 86400) Then
+		Elapsed = Round2(Elapsed * 0.000277777778, 0)
+		TimeUnit = "h"
+	Else
+		Elapsed = Round2(Elapsed * 0.000277777778 / 24, 0)
+		TimeUnit = "d"
+	End If
+	
+	Return Elapsed & TimeUnit & TimeHappens
+End Sub
+
+Sub lblMenu_Click
+	StartActivity(screen.CreateIntent)
+End Sub

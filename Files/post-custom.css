@@ -1,0 +1,12 @@
+img {
+	max-width: 99%;
+}
+
+img:before {
+    content: ' ';
+    display: block;
+    position: absolute;
+    height: 48px;
+    width: 48px;
+    background-image: url(file:///android_asset/post-blank-pic.png);
+}
