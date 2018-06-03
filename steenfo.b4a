@@ -65,7 +65,7 @@ Version=8
 @EndOfDesignText@
 #Region  Project Attributes 
 	#ApplicationLabel: SteemiAPP
-	#VersionCode: 17
+	#VersionCode: 18
 	
 	#VersionName: Amberdawn
 	'SupportedOrientations possible values: unspecified, landscape or portrait.
@@ -86,7 +86,7 @@ Sub Process_Globals
 	Dim manager As AHPreferenceManager
 	Dim screen As AHPreferenceScreen
 	Dim ChosenPostBody, ChosenPostTitle, ChosenPostPPV, ChosenPostAuthor, ChosenPostCreated, ChosenPostURL, ChosenUpvotedBy As String
-	Dim appver As Int = 17
+	Dim appver As Int = 18
 End Sub
 
 Sub Globals
@@ -97,12 +97,13 @@ Sub Globals
 	Private lvIncoming, lvOutgoing, lvCuration, lvAuthor, lvPosts As ListView
 	Dim auth1, auth2, in1, in2, out1, out2, posts1, posts2, cur1, cur2 As Bitmap
 	Dim uOut, uIn, uCur, uAuth As List
-	Dim username, server, entriesno, postsno As String
+	Dim username, server, entriesno, postsno, pricehistory As String
 	Dim TVFS, TVS As Float
 	Dim AppSettings As Map
 	Private totalAuth, totalCur, totalPend, lblMenu, lblSTEEMChange, lblSTEEMPrice, lblSBDChange, lblSBDPrice As Label
 	Dim TotalSBD, TotalSP, TotalAuthSP, TotalAuthSBD, TotalAuthSTEEM As Double = 0
 	Dim pnPrice As Panel
+	Private lblPriceLoading As Label
 End Sub
 
 Sub Activity_Create(FirstTime As Boolean)
@@ -118,6 +119,7 @@ Sub Activity_Create(FirstTime As Boolean)
 	username = manager.GetString("username")
 	entriesno = manager.GetString("entriesno")
 	postsno = manager.GetString("postsno")
+	pricehistory = manager.GetString("pricehistory")
 	'Block app input while loading data
 	ProgressDialogShow2("Loading blockchain data...", False)
 	'Setup the user interface, and initialise the lists
@@ -186,6 +188,12 @@ End Sub
 
 Sub btnPrice_Click
 	'Price button clicked. Start fetching SBD/STEEM price from Coinmarketcap
+	
+	' First, get the setting again
+	pricehistory = manager.GetString("pricehistory")
+	lblPriceLoading.Text = "Loading..."
+	
+	'Start a download job for the CMC json
 	Dim job1 As HttpJob
 	job1.Initialize("GetSBDPrice",Me)
 	job1.Download("https://api.coinmarketcap.com/v2/ticker/1312/")
@@ -225,6 +233,7 @@ Sub CreatePreferenceScreen
 	cat2.AddList("entriesno", "Entries to Fetch", "How many entries I should fetch from the API Server", "250", "", Array As String("100", "150", "200", "250", "300", "350", "400", "450", "500", "550"))
 	cat2.AddList("postsno", "Posts to Fetch", "How many posts should I fetch? Helpful if you post more than 15 times per week!", "15", "", Array As String(10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110, 120))
 	cat2.AddList("server", "API Node", "The preferred Steemit API node", "api.steemit.com", "", Array As String("api.steemit.com", "steemd.minnowsupportproject.org", "steemd.privex.io", "rpc.steemviz.com", "rpc.curiesteem.com"))
+	cat2.AddList("pricehistory", "Price History", "Choose the price change to show", "24 Hours", "", Array As String("1 Hour", "24 Hours", "7 Days"))
 	cat3.Initialize("About SteemiAPP")
 	cat3.AddIntent("App Version", "Amberdawn/r"& appver&" - tap for changelog", SettingsIntent.OpenBrowser("https://steemi.app/changelog.html#r"& appver), "")
 	cat3.AddIntent("About", "App created by @dimitrisp. Tap to visit my Steemit Blog", SettingsIntent.OpenBrowser("https://steemit.com/@dimitrisp"), "")
@@ -402,33 +411,49 @@ Sub ParsePrice(PriceInput As String)
 	Catch
 		Msgbox("CoinMarketCap returned error. Please try again later","CoinMarketCap Error")
 	End Try
+	Dim pricehistoryfetch As String
+	If pricehistory = "1 Hour" Then
+		pricehistoryfetch = "percent_change_1h"
+	Else if pricehistory = "24 Hours" Then
+		pricehistoryfetch = "percent_change_24h"
+	Else if pricehistory = "7 Days" Then
+		pricehistoryfetch = "percent_change_7d"
+	Else
+		pricehistoryfetch = "percent_change_24h" 'Default if for some reason there is nothing set.
+	End If
 	
 	Dim symbol As String = data.Get("symbol")
 	Dim quotes As Map = data.Get("quotes")
 	Dim USD As Map = quotes.Get("USD")
-	Dim percent_change_24h As Double = USD.Get("percent_change_24h")
+	Try
+		Dim percent_change As Double = USD.Get(pricehistoryfetch)
+	Catch
+		Dim percent_change As Double = USD.Get("percent_change_24h")
+	End Try
+	
 	Dim price As Double = USD.Get("price")
 	
 	If symbol =  "SBD" Then
 		lblSBDPrice.text = "$" & price
-		If percent_change_24h < 0 Then
+		If percent_change < 0 Then
 			lblSBDChange.TextColor = Colors.RGB(255, 89, 89)
-		Else If percent_change_24h > 0 Then
+		Else If percent_change > 0 Then
 			lblSBDChange.TextColor = Colors.RGB(123, 255, 89)
 		Else
 			lblSBDChange.TextColor = Colors.White
 		End If
-		lblSBDChange.Text = "Change: " & percent_change_24h & "%"
+		lblSBDChange.Text = "Change: " & percent_change & "%"
 	Else If symbol = "STEEM" Then
 		lblSTEEMPrice.Text = "$" & price
-		If percent_change_24h < 0 Then
+		If percent_change < 0 Then
 			lblSTEEMChange.TextColor = Colors.RGB(255, 89, 89)
-		Else If percent_change_24h > 0 Then
+		Else If percent_change > 0 Then
 			lblSTEEMChange.TextColor = Colors.RGB(123, 255, 89)
 		Else
 			lblSTEEMChange.TextColor = Colors.White
 		End If
-		lblSTEEMChange.Text = "Change: " & percent_change_24h & "%"
+		lblSTEEMChange.Text = "Change: " & percent_change & "%"
+		lblPriceLoading.Text = ""
 	End If
 End Sub
 
@@ -609,6 +634,7 @@ Sub SetDefaults
 	manager.SetString("server", "api.steemit.com")
 	manager.SetString("entriesno", "250")
 	manager.SetString("postsno", "15")
+	manager.SetString("pricehistory", "24 Hours")
 End Sub
 
 Sub SetupUI()
