@@ -2,6 +2,10 @@
 
 SteemiAPP is a free (and now open source) app to check how you are doin' on Steemit!
 
+## Changes
+
+Read [CHANGES.md](CHANGES.md).
+
 ## Getting Started with the project
 
 This project is developed using the latest B4A version (at the time of commiting this README, it is v8.00)
