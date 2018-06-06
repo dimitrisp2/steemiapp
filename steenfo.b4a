@@ -65,7 +65,7 @@ Version=8
 @EndOfDesignText@
 #Region  Project Attributes 
 	#ApplicationLabel: SteemiAPP
-	#VersionCode: 18
+	#VersionCode: 19
 	
 	#VersionName: Amberdawn
 	'SupportedOrientations possible values: unspecified, landscape or portrait.
@@ -86,7 +86,8 @@ Sub Process_Globals
 	Dim manager As AHPreferenceManager
 	Dim screen As AHPreferenceScreen
 	Dim ChosenPostBody, ChosenPostTitle, ChosenPostPPV, ChosenPostAuthor, ChosenPostCreated, ChosenPostURL, ChosenUpvotedBy As String
-	Dim appver As Int = 18
+	Dim appver As Int = 19
+	Dim Animator As Timer
 End Sub
 
 Sub Globals
@@ -104,6 +105,11 @@ Sub Globals
 	Dim TotalSBD, TotalSP, TotalAuthSP, TotalAuthSBD, TotalAuthSTEEM As Double = 0
 	Dim pnPrice As Panel
 	Private lblPriceLoading As Label
+	Private lblSidebar As Label
+	Private pnMenu As Panel
+	Private svMenu As ScrollView
+	Dim SideBarWidth As Int
+	Private pnMenuClose As Label
 End Sub
 
 Sub Activity_Create(FirstTime As Boolean)
@@ -277,6 +283,21 @@ Sub DynGlobalProps(Props As String)
 	TVFS = TempTVFS.SubString2(0, TempTVFS.Length - TempTVFSPrecision) & "." & TempTVFS.SubString(TempTVFS.Length - TempTVFSPrecision)
 	TVS = TempTVS.SubString2(0, TempTVS.Length - TempTVSPrecision) & "." & TempTVS.SubString(TempTVS.Length - TempTVSPrecision)
 End Sub
+
+Sub lblSidebar_Click
+	Dim ScreenWidth As Int = GetDeviceLayoutValues.Width
+	SideBarWidth = ScreenWidth - (ScreenWidth * 40 / 100)
+	Log(SideBarWidth)
+	pnMenu.Visible = True
+	Animator.Initialize("pnAnimator", 1)
+	Animator.Enabled = True
+End Sub
+
+Sub lblSidebar_LongClick
+	StartActivity(screen.CreateIntent)
+End Sub
+
+
 
 Sub lvAuthor_ItemClick (Position As Int, Value As Object)
 	ProgressDialogShow("Loading post, please wait...")
@@ -643,6 +664,19 @@ Sub ParseUserPost(PostHistory As String)
 	uPosts.Clear
 End Sub
 
+Sub pnAnimator_tick
+	If pnMenu.Width < SideBarWidth Then
+		pnMenu.Width = pnMenu.Width + 35
+	Else
+		Animator.Enabled = False
+	End If
+End Sub
+
+Sub pnMenuClose_Click
+	pnMenu.Visible = False
+	pnMenu.Width = 0
+End Sub
+
 Sub pnPrice_Click
 	pnPrice.Visible = False
 End Sub
@@ -728,8 +762,4 @@ Sub TimeStampConvert(Timestamp As String, When As String) As String
 	End If
 	
 	Return Elapsed & TimeUnit & TimeHappens
-End Sub
-
-Sub lblMenu_Click
-	StartActivity(screen.CreateIntent)
 End Sub
