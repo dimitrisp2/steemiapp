@@ -140,6 +140,8 @@ Sub Activity_Create(FirstTime As Boolean)
 	Dim job1 As HttpJob
 	job1.Initialize("DynGlobalProps",Me)
 	job1.PostString("https://api.steemit.com","{""jsonrpc"":""2.0"",""method"":""call"",""params"":[""database_api"",""get_dynamic_global_properties""]}")
+	job1.Initialize("GetAccountInfo", Me)
+	job1.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_accounts"", ""params"":[["""&username&"""]], ""id"":1}")
 
 End Sub
 
@@ -192,6 +194,9 @@ Sub JobDone (Job As HttpJob)
 			Case "ShowPost"
 				'Parse the reply from the server
 				ParseSinglePost(Job.GetString)
+			Case "GetAccountInfo
+				'Parse the reply from the server
+				ParseAccInfo(Job.GetString)
 		End Select
 	Else ' Job could not complete, show messages and hide the loading screen.
 '		Log("Error")
@@ -471,6 +476,75 @@ Sub ParseAccHistory(AccHistory As String)
 		lvAuthor.AddTwoLines2(ThisTX(0), ThisTX(1), ThisTX(2))
 	Next
 	ProgressDialogHide
+End Sub
+
+Sub ParseAccInfo(AccInfo As String)
+	Dim parser As JSONParser
+	parser.Initialize(AccInfo)
+	Dim root As Map = parser.NextObject
+	Dim result As List = root.Get("result")
+	For Each colresult As Map In result
+		''' Generic Account Info
+		Dim last_account_update As String = colresult.Get("last_account_update")
+		Dim steemid As Int = colresult.Get("id")
+		Dim to_withdraw As Int = colresult.Get("to_withdraw")
+		Dim created As String = colresult.Get("created")
+		Dim received_vesting_shares As String = colresult.Get("received_vesting_shares") ' incoming delegations
+		Dim delegated_vesting_shares As String = colresult.Get("delegated_vesting_shares") ' outgoing delegations
+		Dim post_count As Int = colresult.Get("post_count")
+		Dim last_root_post As String = colresult.Get("last_root_post")
+		Dim last_post As String = colresult.Get("last_post")
+		Dim json_metadata As String = colresult.Get("json_metadata")
+		Dim last_owner_update As String = colresult.Get("last_owner_update")
+		'Dim reputation As String = colresult.Get("reputation")
+		
+		''' Wallet Info
+		Dim savings_balance As String = colresult.Get("savings_balance") ' STEEM Savings
+		Dim savings_sbd_balance As String = colresult.Get("savings_sbd_balance") ' SBD Savings
+		Dim balance As String = colresult.Get("balance") ' STEEM
+		Dim sbd_balance As String = colresult.Get("sbd_balance") ' SBD
+		
+		''' Pending Rewards Data
+		Dim reward_steem_balance As String = colresult.Get("reward_steem_balance")
+		Dim reward_sbd_balance As String = colresult.Get("reward_sbd_balance")
+		Dim reward_vesting_balance As String = colresult.Get("reward_vesting_balance") ' Vests
+		Dim reward_vesting_steem As String = colresult.Get("reward_vesting_steem") ' SP
+		
+		''' Vest Data
+		Dim vesting_withdraw_rate As String = colresult.Get("vesting_withdraw_rate")
+		Dim next_vesting_withdrawal As String = colresult.Get("next_vesting_withdrawal")
+		Dim vesting_shares As String = colresult.Get("vesting_shares")
+		Dim withdrawn As Int = colresult.Get("withdrawn") ' Vests withdrawn
+		
+		''' Voting Power Calculation Data
+		Dim last_vote_time As String = colresult.Get("last_vote_time")
+		Dim voting_power As Int = colresult.Get("voting_power")
+
+		''' Witness Data
+		Dim proxy As String = colresult.Get("proxy") ' Witness proxy
+		Dim witnesses_voted_for As Int = colresult.Get("witnesses_voted_for")
+		'Dim witness_votes As List = colresult.Get("witness_votes")
+		'For Each colwitness_votes As String In witness_votes
+		'Next
+	Next
+
+End Sub
+
+Sub ParseFeed(FeedInput As String)
+	Dim parser As JSONParser
+	parser.Initialize(FeedInput)
+	Dim root As Map = parser.NextObject
+	Dim result As List = root.Get("result")
+	For Each colresult As Map In result
+		Dim total_payout_value As String = colresult.Get("total_payout_value")
+		Dim net_votes As Int = colresult.Get("net_votes")
+		Dim root_author As String = colresult.Get("root_author")
+		Dim title As String = colresult.Get("title")
+		Dim pending_payout_value As String = colresult.Get("pending_payout_value")
+		Dim children As Int = colresult.Get("children")
+		Dim last_update As String = colresult.Get("last_update")
+		Dim permlink As String = colresult.Get("permlink")
+	Next
 End Sub
 
 Sub ParsePrice(PriceInput As String)
