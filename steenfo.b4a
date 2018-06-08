@@ -194,7 +194,7 @@ Sub JobDone (Job As HttpJob)
 			Case "ShowPost"
 				'Parse the reply from the server
 				ParseSinglePost(Job.GetString)
-			Case "GetAccountInfo
+			Case "GetAccountInfo"
 				'Parse the reply from the server
 				ParseAccInfo(Job.GetString)
 		End Select
