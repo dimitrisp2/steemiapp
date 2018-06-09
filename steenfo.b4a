@@ -126,7 +126,7 @@ Sub Activity_Create(FirstTime As Boolean)
 	If manager.GetAll.Size = 0 Then SetDefaults
 	'Fetch the details we need
 	server = manager.GetString("server")
-	username = manager.GetString("username")
+	username = manager.GetString("username").ToLowerCase
 	entriesno = manager.GetString("entriesno")
 	postsno = manager.GetString("postsno")
 	pricehistory = manager.GetString("pricehistory")
@@ -228,7 +228,7 @@ End Sub
 Sub btnrefresh_Click
 	' Re-set the details, just in case something changed.
 	server = manager.GetString("server")
-	username = manager.GetString("username")
+	username = manager.GetString("username").ToLowerCase
 	entriesno = manager.GetString("entriesno")
 	postsno = manager.GetString("postsno")
 	'Start fetching all data from the blockchain and block user input
@@ -241,12 +241,13 @@ Sub btnrefresh_Click
 End Sub
 
 Sub CalculateVP(VP As Long, Timestamp As String)
-	' last_vote_time
-	' voting_power
+	' Calculation logic taken from
+	' https://steemkr.com/utopian-io/@stoodkev/steem-js-for-dummies-1-how-to-calculate-the-current-voting-power
 	Dim Elapsed As Long
 	Dim RealVP As Float
-	DateTime.DateFormat = "yy-MM-dd HH:mm:ss"
+	DateTime.DateFormat = "yyyy-MM-dd HH:mm:ss"
 	DateTime.SetTimeZone(0)
+'	Log("Timestamp: " & Timestamp)
 	Elapsed = (DateTime.Now - DateTime.DateParse(Timestamp.Replace("T", " "))) / 1000
 	RealVP = Min((VP + (10000 * Elapsed / 432000))/100, 100)
 	
@@ -385,7 +386,7 @@ Sub lvIncoming_ItemClick (Position As Int, Value As Object)
 End Sub
 
 Sub lvMenu_ItemClick (Position As Int, Value As Object)
-	Log(Value)
+'	Log(Value)
 	If Value = "Feed" Then
 		Msgbox("Your Steemit feed will be available on a later version, by clicking here", "Coming Soon!")
 	Else If Value = "Refresh" Then
@@ -411,7 +412,7 @@ Sub lvPosts_ItemClick (Position As Int, Value As Object)
 End Sub
 
 Sub ParseAccHistory(AccHistory As String)
-	'Log(AccHistory)
+'	Log(AccHistory)
 	Dim parser As JSONParser
 	parser.Initialize(AccHistory)
 	TotalSP = 0
@@ -504,6 +505,7 @@ Sub ParseAccHistory(AccHistory As String)
 		'Log(ThisTX)
 		lvAuthor.AddTwoLines2(ThisTX(0), ThisTX(1), ThisTX(2))
 	Next
+
 	ProgressDialogHide
 End Sub
 
@@ -557,6 +559,8 @@ Sub ParseAccInfo(AccInfo As String)
 		'Next
 	Next
 	CalculateVP(voting_power, last_vote_time)
+	' Reputation calculation logic taken from
+	' https://steemit.com/steemit/@digitalnotvir/how-reputation-scores-are-calculated-the-details-explained-with-simple-math
 	userRep = Round2((((Logarithm(reputation, 10) - 9) * 9) + 25), 2)
 	
 	SetupMenu ' To update Reputation
