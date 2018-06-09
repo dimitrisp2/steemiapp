@@ -95,7 +95,7 @@ Sub Globals
 	'These global variables will be redeclared each time the activity is created.
 	'These variables can only be accessed from this module.
 	Dim ScreenWidth As Int = GetDeviceLayoutValues.Width
-	Private btnrefresh, btnPrice As Button
+	Private btnrefresh As Label
 	Private TabHost1 As TabHost
 	Private lvIncoming, lvOutgoing, lvCuration, lvAuthor, lvPosts As ListView
 	Dim auth1, auth2, in1, in2, out1, out2, posts1, posts2, cur1, cur2 As Bitmap
@@ -104,7 +104,7 @@ Sub Globals
 	Dim TVFS, TVS As Float
 	Dim AppSettings As Map
 	Private totalAuth, totalCur, totalPend, lblSTEEMChange, lblSTEEMPrice, lblSBDChange, lblSBDPrice As Label
-	Dim TotalSBD, TotalSP, TotalAuthSP, TotalAuthSBD, TotalAuthSTEEM As Double = 0
+	Dim TotalSBD, TotalSP, TotalAuthSP, TotalAuthSBD, TotalAuthSTEEM, userRep As Double = 0
 	Dim pnPrice As Panel
 	Private lblPriceLoading As Label
 	Private lblSidebar As Label
@@ -112,6 +112,8 @@ Sub Globals
 	Dim SideBarWidth As Int
 	Private pnMenuClose As Label
 	Private lvMenu As ListView
+	Private pbVotePower As ProgressBar
+	Private lblVPText As Label
 End Sub
 
 Sub Activity_Create(FirstTime As Boolean)
@@ -130,18 +132,18 @@ Sub Activity_Create(FirstTime As Boolean)
 	pricehistory = manager.GetString("pricehistory")
 	'Block app input while loading data
 	ProgressDialogShow2("Loading blockchain data...", False)
+	'Start fetchng data, starting with the global properties (used to calculate SP/Vests etc)
+	Dim job1,job2 As HttpJob
+	job1.Initialize("GetAccountInfo", Me)
+	job1.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_accounts"", ""params"":[["""&username&"""]], ""id"":1}")
 	'Setup the user interface, and initialise the lists
 	SetupUI
 	uOut.Initialize
 	uIn.Initialize
 	uCur.Initialize
 	uAuth.Initialize
-	'Start fetchng data, starting with the global properties (used to calculate SP/Vests etc)
-	Dim job1 As HttpJob
-	job1.Initialize("DynGlobalProps",Me)
-	job1.PostString("https://api.steemit.com","{""jsonrpc"":""2.0"",""method"":""call"",""params"":[""database_api"",""get_dynamic_global_properties""]}")
-	job1.Initialize("GetAccountInfo", Me)
-	job1.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_accounts"", ""params"":[["""&username&"""]], ""id"":1}")
+	job2.Initialize("DynGlobalProps",Me)
+	job2.PostString("https://api.steemit.com","{""jsonrpc"":""2.0"",""method"":""call"",""params"":[""database_api"",""get_dynamic_global_properties""]}")
 
 End Sub
 
@@ -231,9 +233,36 @@ Sub btnrefresh_Click
 	postsno = manager.GetString("postsno")
 	'Start fetching all data from the blockchain and block user input
 	ProgressDialogShow2("Loading blockchain data...", False)
-	Dim job1 As HttpJob
-	job1.Initialize("DynGlobalProps",Me)
-	job1.PostString("https://api.steemit.com","{""id"":""1"", ""jsonrpc"":""2.0"",""method"":""call"",""params"":[""database_api"",""get_dynamic_global_properties""]}")
+	Dim job1,job2 As HttpJob
+	job1.Initialize("GetAccountInfo", Me)
+	job1.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_accounts"", ""params"":[["""&username&"""]], ""id"":1}")
+	job2.Initialize("DynGlobalProps",Me)
+	job2.PostString("https://api.steemit.com","{""id"":""1"", ""jsonrpc"":""2.0"",""method"":""call"",""params"":[""database_api"",""get_dynamic_global_properties""]}")
+End Sub
+
+Sub CalculateVP(VP As Long, Timestamp As String)
+	' last_vote_time
+	' voting_power
+	Dim Elapsed As Long
+	Dim RealVP As Float
+	DateTime.DateFormat = "yy-MM-dd HH:mm:ss"
+	DateTime.SetTimeZone(0)
+	Elapsed = (DateTime.Now - DateTime.DateParse(Timestamp.Replace("T", " "))) / 1000
+	RealVP = Min((VP + (10000 * Elapsed / 432000))/100, 100)
+	
+	' Change progress bar color, depending on the VP %
+	If RealVP > 0 And RealVP < 20 Then
+		pbVotePower.Color = Colors.Red
+	Else If RealVP >= 20 And RealVP < 40 Then
+		pbVotePower.Color = Colors.RGB(255, 102, 0)
+	Else If RealVP >= 40 And RealVP < 80 Then
+		pbVotePower.Color = Colors.Yellow
+	Else
+		pbVotePower.Color = Colors.Green
+	End If
+	
+	pbVotePower.Progress = RealVP
+	lblVPText.Text = "VP: " & Round2(RealVP, 2) & "%"
 End Sub
 
 Sub CombineTextWithMaterialIcons(s As String) As RichString
@@ -496,7 +525,7 @@ Sub ParseAccInfo(AccInfo As String)
 		Dim last_post As String = colresult.Get("last_post")
 		Dim json_metadata As String = colresult.Get("json_metadata")
 		Dim last_owner_update As String = colresult.Get("last_owner_update")
-		'Dim reputation As String = colresult.Get("reputation")
+		Dim reputation As String = colresult.Get("reputation")
 		
 		''' Wallet Info
 		Dim savings_balance As String = colresult.Get("savings_balance") ' STEEM Savings
@@ -519,7 +548,7 @@ Sub ParseAccInfo(AccInfo As String)
 		''' Voting Power Calculation Data
 		Dim last_vote_time As String = colresult.Get("last_vote_time")
 		Dim voting_power As Int = colresult.Get("voting_power")
-
+		
 		''' Witness Data
 		Dim proxy As String = colresult.Get("proxy") ' Witness proxy
 		Dim witnesses_voted_for As Int = colresult.Get("witnesses_voted_for")
@@ -527,7 +556,10 @@ Sub ParseAccInfo(AccInfo As String)
 		'For Each colwitness_votes As String In witness_votes
 		'Next
 	Next
-
+	CalculateVP(voting_power, last_vote_time)
+	userRep = Round2((((Logarithm(reputation, 10) - 9) * 9) + 25), 2)
+	
+	SetupMenu ' To update Reputation
 End Sub
 
 Sub ParseFeed(FeedInput As String)
@@ -809,6 +841,15 @@ Sub SetDefaults
 	manager.SetString("pricehistory", "24 Hours")
 End Sub
 
+Sub SetupMenu()
+	lvMenu.Clear
+	lvMenu.AddSingleLine2(username & " (" & userRep & ")", "About")
+	lvMenu.AddSingleLine2(CombineTextWithMaterialIcons(Chr(0xe0e5) & " My Feed"), "Feed")
+	lvMenu.AddSingleLine2(CombineTextWithMaterialIcons(Chr(0xe5d5) & " Refresh"), "Refresh")
+	lvMenu.AddSingleLine2(CombineTextWithMaterialIcons(Chr(0xe84f) & " SBD/Steem Price"), "Price")
+	lvMenu.AddSingleLine2(CombineTextWithMaterialIcons(Chr(0xe8b8) & " Settings"), "Settings")
+End Sub
+
 Sub SetupUI()	
 	auth1 = LoadBitmap(File.DirAssets, "author.png")
 	auth2 = LoadBitmap(File.DirAssets, "author2.png")
@@ -857,12 +898,6 @@ Sub SetupUI()
 	'lvMenu.TwoLinesLayout.SecondLabel.TextColor = Colors.LightGray
 	lvMenu.SingleLineLayout.Label.Gravity = Gravity.CENTER_VERTICAL
 	lvMenu.SingleLineLayout.Label.Ellipsize = "END"
-	
-	lvMenu.AddSingleLine2("SteemiAPP", "About")
-	lvMenu.AddSingleLine2(CombineTextWithMaterialIcons(Chr(0xe0e5) & " My Feed"), "Feed")
-	lvMenu.AddSingleLine2(CombineTextWithMaterialIcons(Chr(0xe5d5) & " Refresh"), "Refresh")
-	lvMenu.AddSingleLine2(CombineTextWithMaterialIcons(Chr(0xe84f) & " SBD/Steem Price"), "Price")
-	lvMenu.AddSingleLine2(CombineTextWithMaterialIcons(Chr(0xe8b8) & " Settings"), "Settings")
 	
 	pnMenu.Visible = False
 	pnMenu.Width = 0
