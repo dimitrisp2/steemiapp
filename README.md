@@ -8,7 +8,7 @@ Read [CHANGES.md](CHANGES.md).
 
 ## Getting Started with the project
 
-This project is developed using the latest B4A version (at the time of commiting this README, it is v8.00)
+This project is developed using the latest B4A version (at the time of commiting this README, it is v8.30)
 
 ### Prerequisites/Libraries
 

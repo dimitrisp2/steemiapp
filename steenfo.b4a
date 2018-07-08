@@ -62,7 +62,7 @@ Module1=ShowPost
 NumberOfFiles=25
 NumberOfLibraries=6
 NumberOfModules=1
-Version=8
+Version=8.3
 @EndOfDesignText@
 #Region  Project Attributes 
 	#ApplicationLabel: SteemiAPP
@@ -86,7 +86,7 @@ Sub Process_Globals
 	'These variables can be accessed from all modules.
 	Dim manager As AHPreferenceManager
 	Dim screen As AHPreferenceScreen
-	Dim ChosenPostBody, ChosenPostTitle, ChosenPostPPV, ChosenPostAuthor, ChosenPostCreated, ChosenPostURL, ChosenUpvotedBy As String
+	Dim ChosenPostBody, ChosenPostTitle, ChosenPostPPV, ChosenPostAuthor, ChosenPostCreated, ChosenPostURL, ChosenUpvotedBy, ChosenPostReplies As String
 	Dim appver As Int = 19
 	Dim Animator As Timer
 End Sub
@@ -104,7 +104,7 @@ Sub Globals
 	Dim TVFS, TVS As Float
 	Dim AppSettings As Map
 	Private totalAuth, totalCur, totalPend, lblSTEEMChange, lblSTEEMPrice, lblSBDChange, lblSBDPrice As Label
-	Dim TotalSBD, TotalSP, TotalAuthSP, TotalAuthSBD, TotalAuthSTEEM, userRep As Double = 0
+	Dim TotalSBD, TotalSP, TotalAuthSP, TotalAuthSBD, TotalAuthSTEEM, userRep, RewardBalance, RecentClaims As Double = 0
 	Dim pnPrice As Panel
 	Private lblPriceLoading As Label
 	Private lblSidebar As Label
@@ -114,6 +114,7 @@ Sub Globals
 	Private lvMenu As ListView
 	Private pbVotePower As ProgressBar
 	Private lblVPText As Label
+	Private lvMyFeed As ListView
 End Sub
 
 Sub Activity_Create(FirstTime As Boolean)
@@ -133,21 +134,19 @@ Sub Activity_Create(FirstTime As Boolean)
 	'Block app input while loading data
 	ProgressDialogShow2("Loading blockchain data...", False)
 	'Start fetchng data, starting with the global properties (used to calculate SP/Vests etc)
-	Dim job1,job2 As HttpJob
-	job1.Initialize("GetAccountInfo", Me)
-	job1.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_accounts"", ""params"":[["""&username&"""]], ""id"":1}")
+	Dim job1 As HttpJob
+	job1.Initialize("DynGlobalProps",Me)
+	job1.PostString("https://api.steemit.com","{""jsonrpc"":""2.0"",""method"":""call"",""params"":[""database_api"",""get_dynamic_global_properties""]}")
+	
 	'Setup the user interface, and initialise the lists
 	SetupUI
 	uOut.Initialize
 	uIn.Initialize
 	uCur.Initialize
 	uAuth.Initialize
-	job2.Initialize("DynGlobalProps",Me)
-	job2.PostString("https://api.steemit.com","{""jsonrpc"":""2.0"",""method"":""call"",""params"":[""database_api"",""get_dynamic_global_properties""]}")
-
 End Sub
 
-Sub Activity_KeyPress (KeyCode As Int) As Boolean 'return true if you want to consume the event
+Sub Activity_KeyPress (KeyCode As Int) As Boolean 'return true if you want to consume the event 'ignore
 	If KeyCode = KeyCodes.KEYCODE_BACK Then
 		If pnMenu.Visible = True Then ' If the menu is open, close the menu and keep the app running
 			pnMenu.Visible = False
@@ -175,6 +174,11 @@ Sub JobDone (Job As HttpJob)
 				'Start fetching user posts
 				job1.Initialize("GetUserPosts",Me)
 				job1.PostString("https://" & server,"{""id"":1,""jsonrpc"":""2.0"",""method"":""call"",""params"":[""database_api"",""get_discussions_by_blog"",[{""tag"":"""&username&""",""limit"":"&postsno&",""start_author"":null,""start_permlink"":null}]]}")
+				Dim job2, job3 As HttpJob
+				job2.Initialize("GetAccountInfo", Me)
+				job2.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_accounts"", ""params"":[["""&username&"""]], ""id"":1}")
+				job3.Initialize("GetRewardFund", Me)
+				job3.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_reward_fund"", ""params"":[""post""], ""id"":1}")
 			Case "GetUserPosts"
 				'Parse user posts reply from server
 				ParseUserPost(Job.GetString)
@@ -184,6 +188,9 @@ Sub JobDone (Job As HttpJob)
 			Case "GetAccHistory"
 				'Parse the reply from the server
 				ParseAccHistory(Job.GetString)
+			Case "GetAccountInfo"
+				'Parse the reply from the server
+				ParseAccInfo(Job.GetString)
 			Case "GetSBDPrice"
 				'Parse the reply from the server
 				ParsePrice(Job.GetString)
@@ -193,18 +200,22 @@ Sub JobDone (Job As HttpJob)
 			Case "GetSTEEMPrice"
 				'Parse the reply from the server
 				ParsePrice(Job.GetString)
+			Case "GetRewardFund"
+				Log("Parsing reward fund")
+				ParseRewardFund(Job.GetString)
+			Case "GetUserFeed"
+				ParseFeed(Job.GetString)
+			Case "GetReplies"
+				ChosenPostReplies = ""
+				ParsePostReplies(Job.GetString)
+			Case "GetReplyChild"
+				'ParsePostReplyChild(Job.GetString)
 			Case "ShowPost"
 				'Parse the reply from the server
 				ParseSinglePost(Job.GetString)
-			Case "GetAccountInfo"
-				'Parse the reply from the server
-				ParseAccInfo(Job.GetString)
 		End Select
 	Else ' Job could not complete, show messages and hide the loading screen.
-'		Log("Error")
-		'ToastMessageShow("Error fetching blockchain data", True)
 		Msgbox("API Node is busy or not responding. Please try again later, or choose a different API node.", "Error")
-		'lvIncoming.AddTwoLines2("There was a problem fetching data","The API node is busy or not responding. Try again later.", "No Internet")
 		ProgressDialogHide
 	End If
 	Job.Release
@@ -316,7 +327,7 @@ Sub DynGlobalProps(Props As String)
 	parser.Initialize(Props)
 	Dim root As Map = parser.NextObject
 	Dim currentProps As Map = root.Get("result")
-
+	
 	' Blockchain sends named arrays some times, not sure why...
 	' Because of this, we have to handle both, by catching the error
 	Try
@@ -328,6 +339,7 @@ Sub DynGlobalProps(Props As String)
 		TempTVS = curTVS.Get(0)
 		TempTVSPrecision = curTVS.Get(1)
 	End Try
+	
 	Try
 		Dim curTVFSMap As Map = currentProps.Get("total_vesting_fund_steem")
 		TempTVFS = curTVFSMap.Get("amount")
@@ -362,7 +374,7 @@ Sub lvAuthor_ItemClick (Position As Int, Value As Object)
 	'Log(Value)
 	'Log("Username: " & PostArray(0))
 	'Log("permlink: " & PostArray(1))
-	Dim job1 As HttpJob
+	Dim job1,job2 As HttpJob
 	job1.Initialize("ShowPost",Me)
 	job1.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_content"", ""params"":["""&PostArray(0)&""", """&PostArray(1)&"""], ""id"":1}")
 End Sub
@@ -372,7 +384,7 @@ Sub lvClick(Value As Object)
 	ProgressDialogShow("Loading post, please wait...")
 	Dim PostArray() As String
 	PostArray = Regex.Split("/", Value)
-	Dim job1 As HttpJob
+	Dim job1,job2 As HttpJob
 	job1.Initialize("ShowPost",Me)
 	job1.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_content"", ""params"":["""&PostArray(0)&""", """&PostArray(1)&"""], ""id"":1}")
 End Sub
@@ -386,9 +398,11 @@ Sub lvIncoming_ItemClick (Position As Int, Value As Object)
 End Sub
 
 Sub lvMenu_ItemClick (Position As Int, Value As Object)
-'	Log(Value)
 	If Value = "Feed" Then
-		Msgbox("Your Steemit feed will be available on a later version, by clicking here", "Coming Soon!")
+		'Msgbox("Your Steemit feed will be available on a later version, by clicking here", "Coming Soon!")
+		Dim job1 As HttpJob
+		job1.Initialize("GetUserFeed", Me)
+		job1.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_feed"", ""params"":["""&username&""",0,15], ""id"":1}")
 	Else If Value = "Refresh" Then
 		btnrefresh_Click
 		pnMenuClose_Click
@@ -562,25 +576,46 @@ Sub ParseAccInfo(AccInfo As String)
 	' Reputation calculation logic taken from
 	' https://steemit.com/steemit/@digitalnotvir/how-reputation-scores-are-calculated-the-details-explained-with-simple-math
 	userRep = Round2((((Logarithm(reputation, 10) - 9) * 9) + 25), 2)
-	
 	SetupMenu ' To update Reputation
 End Sub
 
 Sub ParseFeed(FeedInput As String)
 	Dim parser As JSONParser
+	Dim uFeed As List
+	uFeed.Initialize
 	parser.Initialize(FeedInput)
 	Dim root As Map = parser.NextObject
 	Dim result As List = root.Get("result")
 	For Each colresult As Map In result
-		Dim total_payout_value As String = colresult.Get("total_payout_value")
-		Dim net_votes As Int = colresult.Get("net_votes")
-		Dim root_author As String = colresult.Get("root_author")
-		Dim title As String = colresult.Get("title")
-		Dim pending_payout_value As String = colresult.Get("pending_payout_value")
-		Dim children As Int = colresult.Get("children")
-		Dim last_update As String = colresult.Get("last_update")
-		Dim permlink As String = colresult.Get("permlink")
+		'Log(colresult)
+		Dim comment As Map = colresult.Get("comment")
+		
+		Dim total_payout_value As String = comment.Get("total_payout_value")
+		Dim net_votes As Int = comment.Get("net_votes")
+		Dim root_author As String = comment.Get("root_author")
+		Dim title As String = comment.Get("title")
+		Dim body As String = comment.Get("body")
+		Dim net_rshares As String = comment.Get("net_rshares")
+		Log("Reward Balance = " & RewardBalance)
+		Log("Recent Claims = " & RecentClaims)
+		Log("Reward Shares = " & net_rshares)
+		''''''
+		' To calculate STEEM & SBD from RShares, use the following formula:
+		' STEEM = RewardShares * rewrd_balance / recent_claims
+		Dim SteemRewards As Double = net_rshares * RewardBalance / RecentClaims
+		Log("STEEM Rewards: " & SteemRewards)		
+		Dim children As Int = comment.Get("children")
+		'Dim last_update As String = colresult.Get("last_update")
+		Dim permlink As String = comment.Get("permlink")
+		Dim created As String = comment.Get("created")
+		If body.Length > 40 Then
+			body = body.SubString2(0,40) & "..."
+		End If
+		Log(title & "^$^" & body.SubString2(0,20) & "^$^" & SteemRewards & "^$^" & net_votes & "^$^" & children & "^$^" & created  & "^$^" & root_author & "/" & permlink)
+		uFeed.Add(title & "^$^" & body & "^$^" & SteemRewards & "^$^" & net_votes & "^$^" & children & "^$^" & created  & "^$^" & root_author & "/" & permlink)
 	Next
+	
+
 End Sub
 
 Sub ParsePrice(PriceInput As String)
@@ -645,15 +680,28 @@ Sub ParsePrice(PriceInput As String)
 	End If
 End Sub
 
+Sub ParseRewardFund (RewardFunds As String)
+	Dim parser As JSONParser
+	parser.Initialize(RewardFunds)
+	Dim root As Map = parser.NextObject
+	Dim result As Map = root.Get("result")
+	Dim recent_claims, reward_balance As String
+	'RecentClaims = recent_claims.SubString2(0, recent_claims.IndexOf(" "))
+	RecentClaims = result.Get("recent_claims")
+	reward_balance = result.Get("reward_balance")
+	Log("Reward balance: " & reward_balance)
+	RewardBalance = reward_balance.SubString2(0, reward_balance.IndexOf(" "))
+End Sub
+
 Sub ParseSinglePost (TX As String)
 	'Log(TX)
 '	Log(TX)
 	If TX.Length < 20 Then
 		MsgboxAsync("Server error. Please try again later or choose a different API node","Error")
 	End If
-	Dim parser As JSONParser
-	parser.Initialize(TX)
-	Dim root As Map = parser.NextObject
+	Dim Parser As JSONParser
+	Parser.Initialize(TX)
+	Dim root As Map = Parser.NextObject
 	Try
 		Dim result As Map = root.Get("result")
 		Dim title As String = result.Get("title")
@@ -663,6 +711,7 @@ Sub ParseSinglePost (TX As String)
 		Return
 	End Try
 	Dim body As String = result.Get("body")
+	Dim permlink As String = result.Get("permlink")
 	'Dim promoted As String = result.Get("promoted")
 	Dim pending_payout_value As String = result.Get("pending_payout_value")
 	'Dim reblogged_by As List = result.Get("reblogged_by")
@@ -695,7 +744,7 @@ Sub ParseSinglePost (TX As String)
 	Dim created As String = result.Get("created")
 	Dim url As String = result.Get("url")
 	ChosenPostBody = body
-	' Hack for Steepshot broken horizontal line
+	' Hack for Steepshot's broken horizontal line
 	ChosenPostURL = "https://steemit.com/" & url
 	ChosenPostBody = ChosenPostBody.Replace("-   --  -   - ---  -- - -  -- - -   -----   --  -  - ----  -    -   - --", "---")
 	ChosenPostBody =ChosenPostBody.Replace("-- -   -    -  ---- -  -  --   -----   - - --  - - --  --- -   -  --   -", "---")
@@ -703,6 +752,91 @@ Sub ParseSinglePost (TX As String)
 	ChosenPostPPV = pending_payout_value
 	ChosenPostAuthor = author
 	ChosenPostCreated = TimeStampConvert(created, "Past")
+	Log("Post URL: " & permlink)
+	Dim job1 As HttpJob
+	job1.Initialize("GetReplies",Me)
+	job1.PostString("https://" & server,"{""jsonrpc"":""2.0"", ""method"":""condenser_api.get_content_replies"", ""params"":["""&ChosenPostAuthor&""", """&permlink&"""], ""id"":1}")
+End Sub
+
+Sub ParsePostReplies(RemoteReplies As String)
+	Dim parser As JSONParser
+	parser.Initialize(RemoteReplies)
+	Dim root As Map = parser.NextObject
+	Dim result As List = root.Get("result")
+	For Each colresult As Map In result
+		Dim parent_author As String = colresult.Get("parent_author")
+		Dim max_accepted_payout As String = colresult.Get("max_accepted_payout")
+		Dim total_payout_value As String = colresult.Get("total_payout_value")
+		Dim net_votes As Int = colresult.Get("net_votes")
+		Dim root_author As String = colresult.Get("root_author")
+		Dim reward_weight As Int = colresult.Get("reward_weight")
+		Dim title As String = colresult.Get("title")
+		Dim body As String = colresult.Get("body")
+		Dim promoted As String = colresult.Get("promoted")
+		Dim curator_payout_value As String = colresult.Get("curator_payout_value")
+		Dim total_vote_weight As Int = colresult.Get("total_vote_weight")
+		Dim pending_payout_value As String = colresult.Get("pending_payout_value")
+		Dim reblogged_by As List = colresult.Get("reblogged_by")
+		Dim allow_curation_rewards As String = colresult.Get("allow_curation_rewards")
+		Dim allow_replies As String = colresult.Get("allow_replies")
+		Dim children As Int = colresult.Get("children")
+		Dim last_update As String = colresult.Get("last_update")
+		Dim active_votes As List = colresult.Get("active_votes")
+		Dim id As Int = colresult.Get("id")
+		Dim last_payout As String = colresult.Get("last_payout")
+		Dim vote_rshares As Int = colresult.Get("vote_rshares")
+		Dim beneficiaries As List = colresult.Get("beneficiaries")
+		Dim parent_permlink As String = colresult.Get("parent_permlink")
+		Dim abs_rshares As Int = colresult.Get("abs_rshares")
+		Dim author As String = colresult.Get("author")
+		Dim created As String = colresult.Get("created")
+		Dim active As String = colresult.Get("active")
+		Dim allow_votes As String = colresult.Get("allow_votes")
+		Dim author_reputation As String = colresult.Get("author_reputation")
+		Dim children_abs_rshares As Int = colresult.Get("children_abs_rshares")
+		Dim root_permlink As String = colresult.Get("root_permlink")
+		Dim url As String = colresult.Get("url")
+		Dim body_length As Int = colresult.Get("body_length")
+		Dim percent_steem_dollars As Int = colresult.Get("percent_steem_dollars")
+		Dim depth As Int = colresult.Get("depth")
+		Dim total_pending_payout_value As String = colresult.Get("total_pending_payout_value")
+		Dim max_cashout_time As String = colresult.Get("max_cashout_time")
+		Dim Replies As List = colresult.Get("replies")
+		Dim cashout_time As String = colresult.Get("cashout_time")
+		Dim category As String = colresult.Get("category")
+		Dim root_title As String = colresult.Get("root_title")
+		Dim permlink As String = colresult.Get("permlink")
+		Dim json_metadata As String = colresult.Get("json_metadata")
+		Dim author_rewards As Int = colresult.Get("author_rewards")
+		Dim net_rshares As Int = colresult.Get("net_rshares")
+		Log("==== Comment Details ====")
+		Log("Author: " & author)
+		Log("Body: " & body)
+		Log("Number of replies: " & children)
+		Log("Net Votes: " & net_votes)
+		If net_votes = 1 Then
+			Dim votestext As String = "Vote"
+		Else
+			Dim votestext As String = "Votes"
+		End If
+		
+		If children = 1 Then
+			Dim repliestext As String = "Reply"
+		Else if children > 1 Then
+			Dim repliestext As String = "Replies"
+		Else
+			Dim repliestext As String = "Replies"
+		End If
+		' Comment Header
+		ChosenPostReplies = ChosenPostReplies & "<p class=""lead"" style=""margin-top:20px;""><img src=""https://cdn.steemitimages.com/u/" & author & "/avatar"" style=""display: inline-block;background-size: cover;background-repeat: no-repeat;background-position: 50% 50%;border-radius: 50%;width: 48px;height: 48px;""> <a href=""#"">" & author & "</a> <small><a href=""#"">" & TimeStampConvert(created, "Past") & "</a></small> </p>"
+		' Comment Body
+		ChosenPostReplies = ChosenPostReplies & body & "<br />"
+		' Comment footer
+		ChosenPostReplies = ChosenPostReplies & "<p style=""margin-top:10px;""><span class=""Icon chevron-up-circle"" style=""display: inline-block; width: 1.12rem; height: 1.12rem;""><svg enable-background=""new 0 0 33 33"" version=""1.1"" viewBox=""0 0 33 33"" xml:space=""preserve"" xmlns=""http://www.w3.org/2000/svg"" xmlns:xlink=""http://www.w3.org/1999/xlink""><g id=""Chevron_Up_Circle""><circle cx=""16"" cy=""16"" r=""15"" stroke=""#121313"" fill=""none""></circle><path d=""M16.699,11.293c-0.384-0.38-1.044-0.381-1.429,0l-6.999,6.899c-0.394,0.391-0.394,1.024,0,1.414 c0.395,0.391,1.034,0.391,1.429,0l6.285-6.195l6.285,6.196c0.394,0.391,1.034,0.391,1.429,0c0.394-0.391,0.394-1.024,0-1.414 L16.699,11.293z"" fill=""#121313""></path></g></svg></span> $" & total_payout_value & " | " & net_votes & " " & votestext & " | " & children & " " & repliestext & "</p>"
+	Next
+	'Dim id As Int = root.Get("id")
+	'Dim jsonrpc As String = root.Get("jsonrpc")
+
 	ProgressDialogHide
 	StartActivity("ShowPost")
 End Sub
@@ -936,4 +1070,8 @@ Sub TimeStampConvert(Timestamp As String, When As String) As String
 	End If
 	
 	Return Elapsed & TimeUnit & TimeHappens
+End Sub
+
+Sub lvMyFeed_ItemClick (Position As Int, Value As Object)
+	
 End Sub

@@ -31,7 +31,7 @@ Sub Activity_Create(FirstTime As Boolean)
 	'Log(Main.ChosenPostBody)
 	Dim ThisHTML As String
 	'AuthorIMG = "https://cdn.steemitimages.com/u/"& Main.ChosenPostAuthor &"/avatar"
-	ThisHTML = File.ReadString(File.DirAssets, "post.html").Replace("%postusername%", Main.ChosenPostAuthor).Replace("%postcontent%", Main.ChosenPostBody).Replace("%posttime%",  Main.ChosenPostCreated).Replace("%totalpp%", Main.ChosenPostPPV).Replace("%totalupvotes%", Main.ChosenUpvotedBy)
+	ThisHTML = File.ReadString(File.DirAssets, "post.html").Replace("%postusername%", Main.ChosenPostAuthor).Replace("%postcontent%", Main.ChosenPostBody).Replace("%posttime%",  Main.ChosenPostCreated).Replace("%totalpp%", Main.ChosenPostPPV).Replace("%totalupvotes%", Main.ChosenUpvotedBy).Replace("%postcomments%", Main.ChosenPostReplies)
 	'Log(AuthorIMG)
 	'Log(ThisHTML)
 	wvPost.LoadHtml(ThisHTML)
